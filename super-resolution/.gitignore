@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-dataset/
-lightning_logs/
-MNIST/
-weights/
-/backup
