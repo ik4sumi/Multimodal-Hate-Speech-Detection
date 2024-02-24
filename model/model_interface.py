@@ -32,20 +32,28 @@ class MInterface(pl.LightningModule):
         return self.model(img)
 
     def training_step(self, batch, batch_idx):
-        img, labels, filename = batch
-        out = self(img)
-        loss = self.loss_function(out, labels)
+        image, text, label = batch
+        input = torch.concatenate(image,text,dim=1)
+        # one hot encoding
+        label_one_hot = F.one_hot(label, num_classes=6)
+        out = self(input)
+        loss = self.loss_function(out, label_one_hot)
+        out_digit = out.argmax(axis=1)
+        correct_num = sum(label == out_digit).cpu().item()
         self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_acc', correct_num, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        img, labels, filename = batch
-        out = self(img)
-        loss = self.loss_function(out, labels)
-        label_digit = labels.argmax(axis=1)
+        image, text, label = batch
+        input = torch.concatenate(image,text,dim=1)
+        label_one_hot = F.one_hot(label, num_classes=6)
+        out = self(input)
+        loss = self.loss_function(out, label_one_hot)
+        
         out_digit = out.argmax(axis=1)
 
-        correct_num = sum(label_digit == out_digit).cpu().item()
+        correct_num = sum(label == out_digit).cpu().item()
 
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log('val_acc', correct_num/len(out_digit),
@@ -92,6 +100,8 @@ class MInterface(pl.LightningModule):
             self.loss_function = F.l1_loss
         elif loss == 'bce':
             self.loss_function = F.binary_cross_entropy
+        elif loss == 'ce':
+            self.loss_function = F.cross_entropy
         else:
             raise ValueError("Invalid Loss Type!")
 
