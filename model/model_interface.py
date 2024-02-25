@@ -19,6 +19,7 @@ from torch.nn import functional as F
 import torch.optim.lr_scheduler as lrs
 
 import pytorch_lightning as pl
+from sklearn.metrics import f1_score, roc_auc_score
 
 
 class MInterface(pl.LightningModule):
@@ -32,34 +33,84 @@ class MInterface(pl.LightningModule):
         return self.model(img)
 
     def training_step(self, batch, batch_idx):
-        image, text, label = batch
-        input = torch.concatenate(image,text,dim=1)
+        image, text, label = batch["image"],batch["text"],batch["label"]
+        input = torch.cat((image,text),dim=-1)
         # one hot encoding
-        label_one_hot = F.one_hot(label, num_classes=6)
+
+        label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
+        label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
+        label_binary = (label != 0).float().unsqueeze(1)
         out = self(input)
-        loss = self.loss_function(out, label_one_hot)
-        out_digit = out.argmax(axis=1)
-        correct_num = sum(label == out_digit).cpu().item()
-        self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train_acc', correct_num, on_step=True, on_epoch=True, prog_bar=True)
+        if self.hparams.binary:
+            loss = self.loss_function(out, label_binary)
+            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            out = out>0
+            correct_num = sum(label_binary == out).cpu().item()
+            # calculate F1 and AUC
+            f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())          
+            self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=True)
+            self.log('f1', f1, on_step=True, on_epoch=True, prog_bar=True)
+        else:
+            loss = self.loss_function(out, label_one_hot)
+            out_digit = out.argmax(axis=1)
+            correct_num = sum(label == out_digit).cpu().item()
+            # 正例：类别非0
+            positive_correct = ((out_digit != 0) & (label != 0)).sum().cpu().item()
+            positive_total = (label != 0).sum().cpu().item()
+            
+            # 负例：类别为0
+            negative_correct = ((out_digit == 0) & (label == 0)).sum().cpu().item()
+            negative_total = (label == 0).sum().cpu().item()
+            
+            # 计算正负例的正确率
+            positive_acc = positive_correct / positive_total if positive_total > 0 else 0
+            negative_acc = negative_correct / negative_total if negative_total > 0 else 0
+            self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=True)
+            self.log('positive_acc', positive_acc, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('negative_acc', negative_acc, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        image, text, label = batch
-        input = torch.concatenate(image,text,dim=1)
-        label_one_hot = F.one_hot(label, num_classes=6)
+        image, text, label = batch["image"],batch["text"],batch["label"]
+        input = torch.cat((image,text),dim=-1)
+        label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
+        label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
+        label_binary = (label != 0).float().unsqueeze(1)
         out = self(input)
-        loss = self.loss_function(out, label_one_hot)
+        if self.hparams.binary:
+            loss = self.loss_function(out, label_binary)
+            out = out>0.5
+            correct_num = sum(label_binary == out).cpu().item()
+            self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('val_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=True)
+        else:
+            loss = self.loss_function(out, label_one_hot)
         
-        out_digit = out.argmax(axis=1)
+            out_digit = out.argmax(axis=1)
 
-        correct_num = sum(label == out_digit).cpu().item()
+            correct_num = sum(label == out_digit).cpu().item()
 
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_acc', correct_num/len(out_digit),
-                 on_step=False, on_epoch=True, prog_bar=True)
+            # 正例：类别非0
+            positive_correct = ((out_digit != 0) & (label != 0)).sum().cpu().item()
+            positive_total = (label != 0).sum().cpu().item()
+            
+            # 负例：类别为0
+            negative_correct = ((out_digit == 0) & (label == 0)).sum().cpu().item()
+            negative_total = (label == 0).sum().cpu().item()
+            
+            # 计算正负例的正确率
+            positive_acc = positive_correct / positive_total if positive_total > 0 else 0
+            negative_acc = negative_correct / negative_total if negative_total > 0 else 0
+            
+            self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+            self.log('val_acc', correct_num/len(out_digit),
+                    on_step=False, on_epoch=True, prog_bar=True)
+            self.log('positive_acc', positive_acc, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('negative_acc', negative_acc, on_step=True, on_epoch=True, prog_bar=True)
 
-        return (correct_num, len(out_digit))
+        return loss
 
     def test_step(self, batch, batch_idx):
         # Here we just reuse the validation_step for testing
@@ -94,14 +145,18 @@ class MInterface(pl.LightningModule):
 
     def configure_loss(self):
         loss = self.hparams.loss.lower()
+        if self.hparams.binary:
+            loss = 'bce'
         if loss == 'mse':
             self.loss_function = F.mse_loss
         elif loss == 'l1':
             self.loss_function = F.l1_loss
         elif loss == 'bce':
-            self.loss_function = F.binary_cross_entropy
+            pos_weight = torch.tensor([3],device="cuda")
+            self.loss_function = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         elif loss == 'ce':
-            self.loss_function = F.cross_entropy
+            weights = torch.tensor([0.15, 1.0, 1.0, 1.0, 1.0, 1.0], device="cuda")
+            self.loss_function = torch.nn.CrossEntropyLoss(weight=weights)
         else:
             raise ValueError("Invalid Loss Type!")
 

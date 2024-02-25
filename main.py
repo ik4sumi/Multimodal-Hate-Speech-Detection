@@ -26,10 +26,12 @@ from argparse import ArgumentParser
 from pytorch_lightning import Trainer
 import pytorch_lightning.callbacks as plc
 from pytorch_lightning.loggers import TensorBoardLogger
+import argparse
 
 from model import MInterface
 from data import DInterface
 from utils import load_model_path_by_args
+import torch
 
 
 def load_callbacks():
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--seed', default=1234, type=int)
-    parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--lr', default=1e-5, type=float)
 
     # LR Scheduler
     parser.add_argument('--lr_scheduler', choices=['step', 'cosine'], type=str)
@@ -96,25 +98,27 @@ if __name__ == '__main__':
     parser.add_argument('--load_v_num', default=None, type=int)
 
     # Training Info
-    parser.add_argument('--dataset', default='standard_data', type=str)
+    parser.add_argument('--dataset', default='h_s_dataset', type=str)
     parser.add_argument('--data_dir', default='ref/data', type=str)
-    parser.add_argument('--model_name', default='standard_net', type=str)
-    parser.add_argument('--loss', default='bce', type=str)
+    parser.add_argument('--model_name', default='simple_classifier', type=str)
+    parser.add_argument('--loss', default='ce', type=str)
     parser.add_argument('--weight_decay', default=1e-5, type=float)
     parser.add_argument('--no_augment', action='store_true')
     parser.add_argument('--log_dir', default='lightning_logs', type=str)
+    parser.add_argument('--binary', default=True, type=bool)
     
     # Model Hyperparameters
     parser.add_argument('--hid', default=64, type=int)
     parser.add_argument('--block_num', default=8, type=int)
-    parser.add_argument('--in_channel', default=3, type=int)
+    parser.add_argument('--in_channel', default=1024, type=int)
+    parser.add_argument('--out_channel', default=1, type=int)
     parser.add_argument('--layer_num', default=5, type=int)
 
     # Other
     parser.add_argument('--aug_prob', default=0.5, type=float)
 
     # Add pytorch lightning's args to parser as a group.
-    parser = Trainer.add_argparse_args(parser)
+    #parser = Trainer.add_argparse_args(parser)
 
     ## Deprecated, old version
     # parser = Trainer.add_argparse_args(
@@ -122,6 +126,9 @@ if __name__ == '__main__':
 
     # Reset Some Default Trainer Arguments' Default Values
     parser.set_defaults(max_epochs=100)
+    parser.set_defaults(precision=16)
+    parser.set_defaults(accelerator='gpu')
+    parser.set_defaults(devices=torch.cuda.device_count() if torch.cuda.is_available() else 0)
 
     args = parser.parse_args()
 
