@@ -36,12 +36,14 @@ import torch
 
 def load_callbacks():
     callbacks = []
+    '''
     callbacks.append(plc.EarlyStopping(
         monitor='val_acc',
         mode='max',
         patience=10,
         min_delta=0.001
     ))
+    '''
 
     callbacks.append(plc.ModelCheckpoint(
         monitor='val_acc',
@@ -80,7 +82,7 @@ def main(args):
 if __name__ == '__main__':
     parser = ArgumentParser()
     # Basic Training Control
-    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--batch_size', default=64, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('--lr', default=1e-5, type=float)
@@ -89,7 +91,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_scheduler', choices=['step', 'cosine'], type=str)
     parser.add_argument('--lr_decay_steps', default=20, type=int)
     parser.add_argument('--lr_decay_rate', default=0.5, type=float)
-    parser.add_argument('--lr_decay_min_lr', default=1e-5, type=float)
+    parser.add_argument('--lr_decay_min_lr', default=1e-6, type=float)
 
     # Restart Control
     parser.add_argument('--load_best', action='store_true')

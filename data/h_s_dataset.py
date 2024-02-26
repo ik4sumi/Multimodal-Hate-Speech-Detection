@@ -32,7 +32,7 @@ class HSDataset(Dataset):
     
     def __getitem__(self, idx):
         img_id = self.ids[idx]
-        
+   
         # 直接从加载的数据中获取样本
         sample = self.data.get(img_id, None)
         if sample is None:
@@ -48,6 +48,5 @@ class HSDataset(Dataset):
             labels = torch.tensor(0)
         else:
             labels = torch.tensor(1)
-        
         
         return {"image":image_features, "text":text_features, "label":labels}

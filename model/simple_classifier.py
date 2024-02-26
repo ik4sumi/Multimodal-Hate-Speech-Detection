@@ -7,11 +7,16 @@ class SimpleClassifier(nn.Module):
     def __init__(self, in_channel=512, out_channel=10, hid=128, layer_num=5):
         super().__init__()
         self.classifier = nn.Sequential(
-            nn.Linear(in_channel, 512),
-            #nn.ReLU(inplace=True),
-            #nn.Linear(512, 256),
-            #nn.ReLU(inplace=True),
-            nn.Linear(512, out_channel)
+            nn.Linear(in_channel, 2048),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(2048, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(256, out_channel)
         )
 
     def forward(self, x):

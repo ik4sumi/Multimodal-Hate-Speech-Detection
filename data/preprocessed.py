@@ -14,6 +14,7 @@ import string
 import nltk
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import SnowballStemmer
+import torch.nn.functional as F
 
 # 定义数据和文件路径
 img_dir = "/root/autodl-tmp/hate_speech_dataset/img_resized"
@@ -30,6 +31,7 @@ save_dir = "/root/autodl-tmp/hate_speech_dataset/processed"
 # 加载预训练的CLIP模型
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)
+nltk.download('stopwords')
 
 # 函数：加载并预处理图像
 def load_and_preprocess_image(image_path):
@@ -88,7 +90,7 @@ def split_text(text, max_length=77):
     将文本分割成不超过最大长度的片段。
     尝试在空格处分割以保持单词的完整性。
     """
-    text = preprocess(text)
+    text = preprocess_text(text)
     words = text.split()
     segments = []
     current_segment = ""
@@ -127,13 +129,13 @@ with open(json_file, 'r') as f:
 
 def extract_swin_features(image_path,device):
     # 加载预训练的Swin Transformer模型
-    model = timm.create_model('swin_large_patch4_window12_384', pretrained=True).to(device).half()
+    model = timm.create_model('swinv2_tiny_window8_256', pretrained=True).to(device).half()
     model.eval()  # 设置为评估模式
 
     # 定义图像预处理
     preprocess = transforms.Compose([
         transforms.Resize(256),
-        transforms.CenterCrop(384),
+        transforms.CenterCrop(256),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -152,7 +154,7 @@ def extract_swin_features(image_path,device):
 def extract_bert_features(text,device):
     segments = split_text(text)
     features_list = []
-    
+    target_seq_length = 50
     for segment in segments:
         # 初始化RoBERTa的tokenizer和model
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
@@ -170,13 +172,24 @@ def extract_bert_features(text,device):
         with torch.no_grad():
             output = model(input_ids=input_ids, attention_mask=attention_mask)
             text_features = output.last_hidden_state[:, :, :]  # 取[CLS]标记的特征
-            features_list.append(text_features)
+            # 调整特征序列到目标长度
+            current_seq_length = text_features.shape[1]
+            if current_seq_length < target_seq_length:
+                # Padding
+                padding_length = target_seq_length - current_seq_length
+                padded_features = F.pad(text_features, (0, 0, 0, padding_length), "constant", 0)
+                final_features = padded_features
+            else:
+                # 截断或者直接使用，根据实际长度决定
+                final_features = text_features[:, :target_seq_length, :]
+            features_list.append(final_features)
 
         # text_features是提取的文本特征
     
+
+
     # 将所有片段的特征进行平均，作为整个文本的特征表示
     features = torch.mean(torch.stack(features_list), dim=0)
-    print(features.shape)
     return features
 
 
@@ -192,8 +205,8 @@ def process_dataset():
 
         # 处理图像文件
         if os.path.exists(img_path):
-            image_features = extract_image_features(img_path)
-            #image_features =  extract_swin_features(img_path, device)
+            #image_features = extract_image_features(img_path)
+            image_features =  extract_swin_features(img_path, device)
             entry["image_features"] = image_features.cpu().numpy()
         else:
             print(f"Image file for {tweet_id} not found.")
@@ -206,8 +219,8 @@ def process_dataset():
         else:
             text = details["tweet_text"]
         
-        text_features = extract_text_features(model, text, device)
-        #text_features = extract_bert_features(text, device)
+        #text_features = extract_text_features(model, text, device)
+        text_features = extract_bert_features(text, device)
         entry["text_features"] = text_features.cpu().numpy()
 
         # 保存标签
@@ -217,7 +230,7 @@ def process_dataset():
         dataset_features[tweet_id] = entry
 
     # 使用pickle保存整个字典
-    with open(os.path.join(save_dir, "dataset_features.pkl"), 'wb') as f:
+    with open(os.path.join(save_dir, "dataset_features_swin_bert.pkl"), 'wb') as f:
         pickle.dump(dataset_features, f, protocol=pickle.HIGHEST_PROTOCOL)
 # 运行数据处理
 process_dataset()

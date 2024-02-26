@@ -39,18 +39,23 @@ class MInterface(pl.LightningModule):
 
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
-        label_binary = (label != 0).float().unsqueeze(1)
+        label_binary = (label == 1).float().unsqueeze(1)
         out = self(input)
         if self.hparams.binary:
             loss = self.loss_function(out, label_binary)
-            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            #auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
             out = out>0
-            correct_num = sum(label_binary == out).cpu().item()
+            correct_num = sum(label_binary[:,0] == out[:,0]).cpu().item()
             # calculate F1 and AUC
-            f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())          
-            self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('train_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=True)
-            self.log('f1', f1, on_step=True, on_epoch=True, prog_bar=True)
+            f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            recall = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy(), average='macro')          
+            #self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('train_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            self.log('train_f1', f1, on_step=True, on_epoch=True, prog_bar=True,logger=True)
+            self.log('train_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            self.log('train_recall', recall, on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            #self.log('positive', sum(out[:,0]), on_step=True, on_epoch=True, prog_bar=True)
         else:
             loss = self.loss_function(out, label_one_hot)
             out_digit = out.argmax(axis=1)
@@ -77,14 +82,20 @@ class MInterface(pl.LightningModule):
         input = torch.cat((image,text),dim=-1)
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
-        label_binary = (label != 0).float().unsqueeze(1)
+        label_binary = (label == 1).float().unsqueeze(1)
         out = self(input)
         if self.hparams.binary:
             loss = self.loss_function(out, label_binary)
             out = out>0.5
-            correct_num = sum(label_binary == out).cpu().item()
-            self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            self.log('val_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=True)
+            correct_num = sum(label_binary[:,0] == out[:,0]).cpu().item()
+            f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            recall = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy(), average='macro')       
+            #self.log('test_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            self.log('test_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            self.log('test_f1', f1, on_step=True, on_epoch=True, prog_bar=True,logger=True)
+            self.log('test_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            self.log('test_recall', recall, on_step=True, on_epoch=True, prog_bar=False,logger=True)
         else:
             loss = self.loss_function(out, label_one_hot)
         
@@ -136,8 +147,8 @@ class MInterface(pl.LightningModule):
                                        step_size=self.hparams.lr_decay_steps,
                                        gamma=self.hparams.lr_decay_rate)
             elif self.hparams.lr_scheduler == 'cosine':
-                scheduler = lrs.CosineAnnealingLR(optimizer,
-                                                  T_max=self.hparams.lr_decay_steps,
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                  T_0=self.hparams.lr_decay_steps,
                                                   eta_min=self.hparams.lr_decay_min_lr)
             else:
                 raise ValueError('Invalid lr_scheduler type!')
