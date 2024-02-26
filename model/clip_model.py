@@ -7,7 +7,7 @@ class ClipModel(nn.Module):
         super(ClipModel, self).__init__()
         self.clip_model, _ = clip.load(clip_model_name, jit=False)
         #self.clip_model = self.clip_model.half()
-        self.clip_model = self.clip_model.to(dtype=torch.float16)
+        #self.clip_model = self.clip_model.to(dtype=torch.float16)
         for param in self.clip_model.parameters():
             param.requires_grad = True
         
