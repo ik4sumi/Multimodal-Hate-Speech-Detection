@@ -129,7 +129,7 @@ if __name__ == '__main__':
 
     # Reset Some Default Trainer Arguments' Default Values
     parser.set_defaults(max_epochs=100)
-    parser.set_defaults(precision=16)
+    #parser.set_defaults(precision=16)
     parser.set_defaults(accelerator='gpu')
     parser.set_defaults(devices=torch.cuda.device_count() if torch.cuda.is_available() else 0)
 
