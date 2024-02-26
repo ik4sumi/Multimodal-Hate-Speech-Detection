@@ -34,13 +34,18 @@ class MInterface(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         image, text, label = batch["image"],batch["text"],batch["label"]
-        input = torch.cat((image,text),dim=-1)
+        if self.hparams.pretrain:
+            input = torch.cat((image,text),dim=-1)
+            out = self(input)
+        else:
+            out = self(batch)   
         # one hot encoding
 
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
         label_binary = (label == 1).float().unsqueeze(1)
-        out = self(input)
+
+        
         if self.hparams.binary:
             loss = self.loss_function(out, label_binary)
             #auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
@@ -79,11 +84,17 @@ class MInterface(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         image, text, label = batch["image"],batch["text"],batch["label"]
-        input = torch.cat((image,text),dim=-1)
+
+        if self.hparams.pretrain:
+            input = torch.cat((image,text),dim=-1)
+            out = self(input)
+        else:
+            out = self(batch)
+
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
         label_binary = (label == 1).float().unsqueeze(1)
-        out = self(input)
+        
         if self.hparams.binary:
             loss = self.loss_function(out, label_binary)
             out = out>0.5

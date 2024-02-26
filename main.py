@@ -100,14 +100,15 @@ if __name__ == '__main__':
     parser.add_argument('--load_v_num', default=None, type=int)
 
     # Training Info
-    parser.add_argument('--dataset', default='h_s_dataset', type=str)
+    parser.add_argument('--dataset', default='hate_speech_dataset', type=str)
     parser.add_argument('--data_dir', default='ref/data', type=str)
-    parser.add_argument('--model_name', default='simple_classifier', type=str)
+    parser.add_argument('--model_name', default='clip_model', type=str)
     parser.add_argument('--loss', default='ce', type=str)
     parser.add_argument('--weight_decay', default=1e-5, type=float)
     parser.add_argument('--no_augment', action='store_true')
     parser.add_argument('--log_dir', default='lightning_logs', type=str)
     parser.add_argument('--binary', default=True, type=bool)
+    parser.add_argument('--pretrain', default=False, type=bool)
     
     # Model Hyperparameters
     parser.add_argument('--hid', default=64, type=int)
