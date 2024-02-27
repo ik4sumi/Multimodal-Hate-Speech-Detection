@@ -11,7 +11,11 @@ class CrossModalAttention(nn.Module):
                   vision_model_name='swin_small_patch4_window7_224',
                   text_model_name='bert-base-uncased',
                   freeze=False,
-                  hidden_dims=128):
+                  hidden_dims=128,
+                  text_only=False,
+                  image_only=False,
+                  t_len=50,
+                  v_len=49):
         super(CrossModalAttention, self).__init__()
 
         # swin transformer & bert
@@ -37,12 +41,18 @@ class CrossModalAttention(nn.Module):
                     param.requires_grad = True
 
         # cross-attention modules      
-        self.v2t = CrossAttentionModule(vision_features_dim,text_features_dim,hidden_dims)
-        self.t2v = CrossAttentionModule(text_features_dim,vision_features_dim,hidden_dims)
+        self.v2t = CrossAttentionModule(vision_features_dim,text_features_dim,hidden_dims,x_len=v_len,y_len=t_len)
+        self.t2v = CrossAttentionModule(text_features_dim,vision_features_dim,hidden_dims,x_len=t_len,y_len=v_len)
+
+        self.text_only = text_only
+        self.image_only = image_only
+
+        if not text_only and not image_only:
+            hidden_dims *=2
 
         # output layers
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_dims*2, 2048),
+            nn.Linear(hidden_dims, 2048),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
             nn.Linear(2048, 1024),
@@ -69,17 +79,23 @@ class CrossModalAttention(nn.Module):
         image_features = self.vision_model.forward_features(images)  # 获取图像特征
         image_features = rearrange(image_features, 'b h w d -> b (h w) d')
 
+
         v2t = self.v2t(image_features,text_features)
         t2v = self.t2v(text_features,image_features)
 
-        combined_features = torch.cat((v2t, t2v), dim=1)
+        if self.text_only and not self.image_only:
+            features = v2t
+        elif self.image_only and not self.text_only:
+            features = t2v
+        else:
+            features = torch.cat((v2t, t2v), dim=1)
 
-        logits = self.classifier(combined_features)
+        logits = self.classifier(features)
 
         return logits
 
 class CrossAttentionModule(nn.Module):
-    def __init__(self, x_dim, y_dim, attention_dim=128,dropout_rate=0.1):
+    def __init__(self, x_dim, y_dim, attention_dim=128,dropout_rate=0.1,x_len=1,y_len=1):
         super(CrossAttentionModule, self).__init__()
 
         self.query_transform = nn.Linear(x_dim, attention_dim)
@@ -94,7 +110,8 @@ class CrossAttentionModule(nn.Module):
             nn.Dropout(dropout_rate),
             nn.Linear(attention_dim * 4, attention_dim)
         )
-
+        self.normx = nn.LayerNorm(x_dim)
+        self.normy = nn.LayerNorm(y_dim)
         self.norm1 = nn.LayerNorm(attention_dim)
         self.norm2 = nn.LayerNorm(attention_dim)
         self.dropout1 = nn.Dropout(dropout_rate)
@@ -102,10 +119,19 @@ class CrossAttentionModule(nn.Module):
 
         self.scoring_layer = nn.Linear(attention_dim, 1)
 
+        self.positional_encoding_x = nn.Parameter(torch.randn(x_len, x_dim))
+        self.positional_encoding_y = nn.Parameter(torch.randn(y_len, y_dim))
+
     def forward(self, x, y):
         """
         tensor_a, tensor_b 的形状: (b, n, d)
         """
+        x = self.normx(x)
+        y = self.normy(y)
+
+        x = x + self.positional_encoding_x
+        y = y + self.positional_encoding_y
+
         query = self.query_transform(x)  # (b, n, attention_dim)
         key = self.key_transform(y)      # (b, n, attention_dim)
         value = self.value_transform(y)  # (b, n, attention_dim)

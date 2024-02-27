@@ -119,6 +119,8 @@ if __name__ == '__main__':
     parser.add_argument('--freeze', default=False, type=bool)
     parser.add_argument('--vision_model_name', default='swin_small_patch4_window7_224', type=str)
     parser.add_argument('--text_model_name', default='bert-base-uncased', type=str)
+    parser.add_argument('--image_only', default=False, type=bool)
+    parser.add_argument('--text_only', default=False, type=bool)
 
     # Other
     parser.add_argument('--aug_prob', default=0.5, type=float)

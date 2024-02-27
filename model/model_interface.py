@@ -37,8 +37,8 @@ class MInterface(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         image, text, label = batch["image"],batch["text"],batch["label"]
         if self.hparams.pretrain:
-            input = torch.cat((image,text),dim=-1)
-            out = self(input)
+            #input = torch.cat((image,text),dim=-1)
+            out = self(batch)
         else:
             out = self(batch)
             
@@ -59,12 +59,15 @@ class MInterface(pl.LightningModule):
             correct_num = sum(label_binary[:,0] == out[:,0]).cpu().item()
             # calculate F1 and AUC
             f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
-            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            try:
+                auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+                self.log('train_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            except:
+                print('can\'t use auc')
             recall = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy(), average='macro')          
             #self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             self.log('train_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=False,logger=True)
             self.log('train_f1', f1, on_step=True, on_epoch=True, prog_bar=True,logger=True)
-            self.log('train_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
             self.log('train_recall', recall, on_step=True, on_epoch=True, prog_bar=False,logger=True)
             #self.log('positive', sum(out[:,0]), on_step=True, on_epoch=True, prog_bar=True)
         else:
@@ -109,12 +112,15 @@ class MInterface(pl.LightningModule):
             out = out>0.5
             correct_num = sum(label_binary[:,0] == out[:,0]).cpu().item()
             f1 = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
-            auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+            try:
+                auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
+                self.log('test_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
+            except:
+                print('cnt\'t use auc')
             recall = f1_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy(), average='macro')       
             #self.log('test_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             self.log('test_acc', correct_num/label.shape[0], on_step=True, on_epoch=True, prog_bar=False,logger=True)
             self.log('test_f1', f1, on_step=True, on_epoch=True, prog_bar=True,logger=True)
-            self.log('test_auc', auc, on_step=True, on_epoch=True, prog_bar=False,logger=True)
             self.log('test_recall', recall, on_step=True, on_epoch=True, prog_bar=False,logger=True)
         else:
             loss = self.loss_function(out, label_one_hot)

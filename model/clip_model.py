@@ -9,7 +9,9 @@ class ClipModel(nn.Module):
     def __init__(self, clip_model_name='ViT-B/32', num_classes=1,
                  vision_model_name='swin_small_patch4_window7_224',
                  text_model_name='bert-base-uncased',
-                 freeze=False):
+                 freeze=False,
+                 image_only=False,
+                 text_only=False):
         super(ClipModel, self).__init__()
         #self.clip_model, _ = clip.load(clip_model_name, jit=False)
         #self.clip_model = self.clip_model.half()
@@ -26,8 +28,18 @@ class ClipModel(nn.Module):
         text_features_dim = self.text_model.config.hidden_size
         vision_features_dim = self.vision_model.num_features
 
+        self.image_only = image_only
+        self.text_only = text_only
+        
+        if image_only and not text_only:
+            self.in_channel = vision_features_dim
+        elif text_only and not image_only:
+            self.in_channel = text_features_dim
+        else:
+            self.in_channel = vision_features_dim + text_features_dim
+
         self.classifier = nn.Sequential(
-            nn.Linear(vision_features_dim + text_features_dim, 2048),
+            nn.Linear(self.in_channel, 2048),
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
             nn.Linear(2048, 1024),
@@ -72,9 +84,14 @@ class ClipModel(nn.Module):
         #image_features = self.clip_model.encode_image(images)
         #text_features = self.clip_model.encode_text(texts)
 
-        combined_features = torch.cat((image_features, text_features), dim=1)
+        if self.image_only and not self.text_only:
+            features = image_features
+        elif self.text_only and not self.image_only:
+            features = text_features
+        else:
+            features = torch.cat((image_features, text_features), dim=1)
 
 
-        logits = self.classifier(combined_features)
+        logits = self.classifier(features)
 
         return logits
