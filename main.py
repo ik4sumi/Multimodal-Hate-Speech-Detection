@@ -128,10 +128,12 @@ if __name__ == '__main__':
     #     parser.add_argument_group(title="pl.Trainer args"))
 
     # Reset Some Default Trainer Arguments' Default Values
-    parser.set_defaults(max_epochs=100)
-    #parser.set_defaults(precision=16)
+    parser.set_defaults(max_epochs=20)
+    parser.set_defaults(precision=16)
     parser.set_defaults(accelerator='gpu')
     parser.set_defaults(devices=torch.cuda.device_count() if torch.cuda.is_available() else 0)
+    parser.set_defaults(amp_backend='native')
+    #parser.set_defaults(resume_from_checkpoint="/root/Multimodal-Hate-Speech-Detection/lightning_logs/version_54/checkpoints/epoch=19-step=42140.ckpt")
 
     args = parser.parse_args()
 

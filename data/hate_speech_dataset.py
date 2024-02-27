@@ -12,6 +12,7 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import SnowballStemmer
 import torch.nn.functional as F
 import clip
+from transformers import BertModel, BertTokenizer
 
 class HateSpeechDataset(Dataset):
     def __init__(self, root_dir="/root/autodl-tmp/hate_speech_dataset", split='train', transform=None, mode='train',partial_dataset=1,device='cuda',):
@@ -27,22 +28,29 @@ class HateSpeechDataset(Dataset):
         self.mode = mode
         self.device = device
         assert mode in ['train', 'val', 'test'], "Mode must be 'train', 'val', or 'test'."
-        self.partial_dataset = partial_dataset if mode != 'test' else 1
+        self.partial_dataset = partial_dataset if mode != 'test' and mode !='val' else 1
 
         # 加载标注数据
         with open(os.path.join(root_dir, 'MMHS150K_GT.json'), 'r') as file:
             self.annotations = json.load(file)
         
         # 加载分割数据
-        split_file = os.path.join(root_dir, 'splits', f'{split}_ids.txt')
+        split_file = os.path.join(root_dir, 'splits', f'{mode}_ids.txt')
         with open(split_file, 'r') as file:
             self.ids = [line.strip() for line in file.readlines()]
 
         clip_model, self.preprocess = clip.load("ViT-B/32")
-        self.tknz = clip.tokenize
+        #self.tknz = clip.tokenize
+        self.tknz = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
     
     def __len__(self):
-        return len(self.ids)
+        return int(self.partial_dataset*len(self.ids))
     
     def __getitem__(self, idx):
         tweet_id = self.ids[idx]
@@ -59,7 +67,7 @@ class HateSpeechDataset(Dataset):
         image = Image.open(img_path).convert('RGB')
         if self.transform:
             image = self.transform(image)
-        image = self.preprocess(image)
+        #image = self.preprocess(image)
         
         # 加载文本
         txt_path = os.path.join(self.root_dir, 'img_txt', tweet_id + '.txt')
@@ -71,7 +79,7 @@ class HateSpeechDataset(Dataset):
         else:
             text = self.annotations[tweet_id]["tweet_text"]
 
-        text = self.tknz([text],truncate=True).squeeze()
+        text = self.tknz(text, padding='max_length', truncation=True, max_length=50, return_tensors="pt")
         
         # 获取标签（取三个标注者标签的模式，如果不存在模式则取第一个标注者的标签）
         #labels = torch.tensor(annotation['labels'])

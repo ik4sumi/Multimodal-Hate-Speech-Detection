@@ -21,6 +21,8 @@ import torch.optim.lr_scheduler as lrs
 import pytorch_lightning as pl
 from sklearn.metrics import f1_score, roc_auc_score
 
+import clip
+
 
 class MInterface(pl.LightningModule):
     def __init__(self, model_name, loss, lr, **kargs):
@@ -38,16 +40,20 @@ class MInterface(pl.LightningModule):
             input = torch.cat((image,text),dim=-1)
             out = self(input)
         else:
-            out = self(batch)   
+            out = self(batch)
+            
         # one hot encoding
 
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
         label_binary = (label == 1).float().unsqueeze(1)
+        positive = sum(label_binary[:,0])
+        negative = len(label_binary[:,0]) - positive
+        self.weight = negative/positive
 
         
         if self.hparams.binary:
-            loss = self.loss_function(out, label_binary)
+            loss = self.loss_function(out, label_binary) 
             #auc = roc_auc_score(label_binary.detach().cpu().numpy(), out.detach().cpu().numpy())
             out = out>0
             correct_num = sum(label_binary[:,0] == out[:,0]).cpu().item()
@@ -84,16 +90,19 @@ class MInterface(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         image, text, label = batch["image"],batch["text"],batch["label"]
-
         if self.hparams.pretrain:
             input = torch.cat((image,text),dim=-1)
             out = self(input)
         else:
             out = self(batch)
+            
 
         label_one_hot = torch.zeros(label.shape[0], 6, device="cuda")
         label_one_hot.scatter_(1, label.long().unsqueeze(1), 1.0)
         label_binary = (label == 1).float().unsqueeze(1)
+        positive = sum(label_binary[:,0])
+        negative = len(label_binary[:,0]) - positive
+        self.weight = negative/positive
         
         if self.hparams.binary:
             loss = self.loss_function(out, label_binary)
@@ -148,7 +157,7 @@ class MInterface(pl.LightningModule):
         else:
             weight_decay = 0
         optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
+            filter(lambda p: p.requires_grad, self.parameters()), lr=self.hparams.lr, weight_decay=weight_decay)
 
         if self.hparams.lr_scheduler is None:
             return optimizer
@@ -181,6 +190,11 @@ class MInterface(pl.LightningModule):
             self.loss_function = torch.nn.CrossEntropyLoss(weight=weights)
         else:
             raise ValueError("Invalid Loss Type!")
+
+    def convert_models_to_fp32(self,model): 
+        for p in model.parameters(): 
+            p.data = p.data.float() 
+            p.grad.data = p.grad.data.float() 
 
     def load_model(self):
         name = self.hparams.model_name
