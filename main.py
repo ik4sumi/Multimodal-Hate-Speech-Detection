@@ -116,6 +116,9 @@ if __name__ == '__main__':
     parser.add_argument('--in_channel', default=1024, type=int)
     parser.add_argument('--out_channel', default=1, type=int)
     parser.add_argument('--layer_num', default=5, type=int)
+    parser.add_argument('--freeze', default=False, type=bool)
+    parser.add_argument('--vision_model_name', default='swin_small_patch4_window7_224', type=str)
+    parser.add_argument('--text_model_name', default='bert-base-uncased', type=str)
 
     # Other
     parser.add_argument('--aug_prob', default=0.5, type=float)

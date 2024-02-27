@@ -6,7 +6,10 @@ from transformers import BertModel, BertTokenizer
 import torch.nn.functional as F
 
 class ClipModel(nn.Module):
-    def __init__(self, clip_model_name='ViT-B/32', num_classes=1, vision_model_name='swin_small_patch4_window7_224',text_model_name='bert-base-uncased'):
+    def __init__(self, clip_model_name='ViT-B/32', num_classes=1,
+                 vision_model_name='swin_small_patch4_window7_224',
+                 text_model_name='bert-base-uncased',
+                 freeze=False):
         super(ClipModel, self).__init__()
         #self.clip_model, _ = clip.load(clip_model_name, jit=False)
         #self.clip_model = self.clip_model.half()
@@ -24,26 +27,32 @@ class ClipModel(nn.Module):
         vision_features_dim = self.vision_model.num_features
 
         self.classifier = nn.Sequential(
-            nn.Linear(vision_features_dim + text_features_dim, 512), 
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes),
+            nn.Linear(vision_features_dim + text_features_dim, 2048),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(2048, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(256, num_classes)
         )
-        '''
-        for param in self.vision_model.parameters():
-            param.requires_grad = False
+        if freeze:
+            for param in self.vision_model.parameters():
+                param.requires_grad = False
 
-        for name, param in self.vision_model.named_parameters():
-            if name.startswith('layers.3') or name.startswith('head'):
-                param.requires_grad = True
+            for name, param in self.vision_model.named_parameters():
+                if name.startswith('layers.3') or name.startswith('head'):
+                    param.requires_grad = True
 
-        for param in self.text_model.parameters():
-            param.requires_grad = False
+            for param in self.text_model.parameters():
+                param.requires_grad = False
 
-        for name, param in self.text_model.named_parameters():
-            if 'encoder.layer.11' in name or 'pooler' in name:
-                param.requires_grad = True
-        '''
+            for name, param in self.text_model.named_parameters():
+                if 'encoder.layer.11' in name or 'pooler' in name:
+                    param.requires_grad = True
+        
     def forward(self, input):
 
         images = input["image"]
