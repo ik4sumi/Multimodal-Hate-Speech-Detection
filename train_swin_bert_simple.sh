@@ -1,7 +1,7 @@
-MODELNAME="simple_classifier"
+MODELNAME="swin_bert_model"
 BATCHSIZE=64
 LR=0.00001
-DATASET="h_s_dataset"
+DATASET="hate_speech_dataset"
 FREEZE=false
 
 python main.py --model_name=$MODELNAME\
